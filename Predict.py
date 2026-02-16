@@ -51,8 +51,14 @@ def get_arguments():
 
 
 def main():
+    print(">>> Entered main()", flush=True)
     args = get_arguments()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+
+    # Device-agnostic setup
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(">>> Using device:", device, flush=True)
+
     snapshot_dir = args.snapshot_dir
     if os.path.exists(snapshot_dir)==False:
         os.makedirs(snapshot_dir)
@@ -66,10 +72,10 @@ def main():
     # Create network   
     model = unet(n_classes=args.num_classes)
    
-    saved_state_dict = torch.load(args.restore_from)  
+    saved_state_dict = torch.load(args.restore_from, map_location=device)
     model.load_state_dict(saved_state_dict)
 
-    model = model.cuda()
+    model = model.to(device)
 
     test_loader = data.DataLoader(
                     LandslideDataSet(args.data_dir, args.test_list, set='unlabeled'),
@@ -85,7 +91,7 @@ def main():
 
     for index, batch in enumerate(test_loader):  
         image, _, name = batch
-        image = image.float().cuda()
+        image = image.float().to(device)
         name = name[0].split('.')[0].split('/')[-1].replace('image','mask')
         print(index+1, '/', len(test_loader), ': Testing ', name)  
         
