@@ -62,8 +62,13 @@ def get_arguments():
 
 
 def main():
+    print(">>> Entered main()", flush=True)
     args = get_arguments()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+
+    # Device-agnostic setup (works on both GPU and CPU)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(">>> Using device:", device, flush=True)
     snapshot_dir = args.snapshot_dir
     if os.path.exists(snapshot_dir)==False:
         os.makedirs(snapshot_dir)
@@ -78,16 +83,17 @@ def main():
     model_import = importName(args.model_module, args.model_name)
     model = model_import(n_classes=args.num_classes)
     model.train()
-    model = model.cuda()
+    model = model.to(device)
 
     src_loader = data.DataLoader(
                     LandslideDataSet(args.data_dir, args.train_list, max_iters=args.num_steps_stop*args.batch_size,set='labeled'),
-                    batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
+                    batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    print(">>> Dataset initialized", flush=True)
 
 
     test_loader = data.DataLoader(
                     LandslideDataSet(args.data_dir, args.train_list,set='labeled'),
-                    batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+                    batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
 
     optimizer = optim.Adam(model.parameters(),
@@ -107,13 +113,13 @@ def main():
         optimizer.zero_grad()
         
         images, labels, _, _ = src_data
-        images = images.cuda()      
+        images = images.to(device)      
         pred = model(images)   
         
         pred_interp = interp(pred)
               
         # CE Loss
-        labels = labels.cuda().long()
+        labels = labels.to(device).long()
         cross_entropy_loss_value = cross_entropy_loss(pred_interp, labels)
         _, predict_labels = torch.max(pred_interp, 1)
         predict_labels = predict_labels.detach().cpu().numpy()
@@ -146,7 +152,7 @@ def main():
             for _, batch in enumerate(test_loader):  
                 image, label,_, name = batch
                 label = label.squeeze().numpy()
-                image = image.float().cuda()
+                image = image.float().to(device)
                 
                 with torch.no_grad():
                     pred = model(image)
